@@ -38,7 +38,6 @@ class Namespace(BaseNamespace):
     search: str
     schedule: str
     dry_run: bool
-    # Пошли доп фильтры, которых не было
     experience: str
     employment: list[str] | None
     area: list[str] | None
@@ -72,275 +71,60 @@ class Operation(BaseOperation):
 
     __aliases__ = ("apply",)
 
-    def setup_parser(self, parser: argparse.ArgumentParser) -> None:
-        parser.add_argument("--resume-id", help="Идентефикатор резюме")
-        parser.add_argument(
-            "--search",
-            help="Строка поиска для фильтрации вакансий, например, 'москва бухгалтер 100500'",  # noqa: E501
-            type=str,
-        )
-        parser.add_argument(
-            "-L",
-            "--message-list-path",
-            "--message-list",
-            help="Путь до файла, где хранятся сообщения для отклика на вакансии. Каждое сообщение — с новой строки. Символы \\n будут заменены на переносы.",  # noqa: E501
-            type=Path,
-        )
-        parser.add_argument(
-            "-f",
-            "--force-message",
-            "--force",
-            help="Всегда отправлять сообщение при отклике",
-            action=argparse.BooleanOptionalAction,
-        )
-        parser.add_argument(
-            "--use-ai",
-            "--ai",
-            help="Использовать AI для генерации сообщений",
-            action=argparse.BooleanOptionalAction,
-        )
-        parser.add_argument(
-            "--first-prompt",
-            help="Начальный помпт чата для генерации сопроводительного письма",
-            default="Напиши сопроводительное письмо для отклика на эту вакансию. Не используй placeholder'ы, твой ответ будет отправлен без обработки.",  # noqa: E501
-        )
-        parser.add_argument(
-            "--prompt",
-            help="Промпт для генерации сопроводительного письма",
-            default="Сгенерируй сопроводительное письмо не более 5-7 предложений от моего имени для вакансии",  # noqa: E501
-        )
-        parser.add_argument(
-            "--total-pages",
-            "--pages",
-            help="Количество обрабатываемых страниц поиска",  # noqa: E501
-            default=20,
-            type=int,
-        )
-        parser.add_argument(
-            "--per-page",
-            help="Сколько должно быть результатов на странице",  # noqa: E501
-            default=100,
-            type=int,
-        )
-        parser.add_argument(
-            "--dry-run",
-            help="Не отправлять отклики, а только выводить информацию",
-            action=argparse.BooleanOptionalAction,
-        )
-
-        # Дальше идут параметры в точности соответствующие параметрам запроса
-        # при поиске подходящих вакансий
-        search_params_group = parser.add_argument_group(
-            "Параметры поиска вакансий",
-            "Эти параметры напрямую соответствуют фильтрам поиска HeadHunter API",
-        )
-
-        search_params_group.add_argument(
-            "--order-by",
-            help="Сортировка вакансий",
-            choices=[
-                "publication_time",
-                "salary_desc",
-                "salary_asc",
-                "relevance",
-                "distance",
-            ],
-            # default="relevance",
-        )
-        search_params_group.add_argument(
-            "--experience",
-            help="Уровень опыта работы (noExperience, between1And3, between3And6, moreThan6)",
-            type=str,
-            default=None,
-        )
-        search_params_group.add_argument(
-            "--schedule",
-            help="Тип графика (fullDay, shift, flexible, remote, flyInFlyOut)",
-            type=str,
-        )
-        search_params_group.add_argument(
-            "--employment", nargs="+", help="Тип занятости"
-        )
-        search_params_group.add_argument(
-            "--area", nargs="+", help="Регион (area id)"
-        )
-        search_params_group.add_argument(
-            "--metro", nargs="+", help="Станции метро (metro id)"
-        )
-        search_params_group.add_argument(
-            "--professional-role", nargs="+", help="Проф. роль (id)"
-        )
-        search_params_group.add_argument(
-            "--industry", nargs="+", help="Индустрия (industry id)"
-        )
-        search_params_group.add_argument(
-            "--employer-id", nargs="+", help="ID работодателей"
-        )
-        search_params_group.add_argument(
-            "--excluded-employer-id", nargs="+", help="Исключить работодателей"
-        )
-        search_params_group.add_argument(
-            "--currency", help="Код валюты (RUR, USD, EUR)"
-        )
-        search_params_group.add_argument(
-            "--salary", type=int, help="Минимальная зарплата"
-        )
-        search_params_group.add_argument(
-            "--only-with-salary",
-            default=False,
-            action=argparse.BooleanOptionalAction,
-        )
-        search_params_group.add_argument(
-            "--label", nargs="+", help="Метки вакансий (label)"
-        )
-        search_params_group.add_argument(
-            "--period", type=int, help="Искать вакансии за N дней"
-        )
-        search_params_group.add_argument(
-            "--date-from", help="Дата публикации с (YYYY-MM-DD)"
-        )
-        search_params_group.add_argument(
-            "--date-to", help="Дата публикации по (YYYY-MM-DD)"
-        )
-        search_params_group.add_argument(
-            "--top-lat", type=float, help="Гео: верхняя широта"
-        )
-        search_params_group.add_argument(
-            "--bottom-lat", type=float, help="Гео: нижняя широта"
-        )
-        search_params_group.add_argument(
-            "--left-lng", type=float, help="Гео: левая долгота"
-        )
-        search_params_group.add_argument(
-            "--right-lng", type=float, help="Гео: правая долгота"
-        )
-        search_params_group.add_argument(
-            "--sort-point-lat",
-            type=float,
-            help="Координата lat для сортировки по расстоянию",
-        )
-        search_params_group.add_argument(
-            "--sort-point-lng",
-            type=float,
-            help="Координата lng для сортировки по расстоянию",
-        )
-        search_params_group.add_argument(
-            "--no-magic",
-            action="store_true",
-            help="Отключить авторазбор текста запроса",
-        )
-        search_params_group.add_argument(
-            "--premium",
-            default=False,
-            action=argparse.BooleanOptionalAction,
-            help="Только премиум вакансии",
-        )
-        search_params_group.add_argument(
-            "--search-field",
-            nargs="+",
-            help="Поля поиска (name, company_name и т.п.)",
-        )
-        search_params_group.add_argument(
-            "--excluded-terms",
-            type=str,
-            help="Исключить вакансии, если название или snippet содержит любую из подстрок (через запятую, например, junior, bitrix, дружный коллектив). Это принудительный фильтр для результатов поиска",
-        )
-
-    def run(
-        self,
-        tool: HHApplicantTool,
-    ) -> None:
+    def run(self, tool: HHApplicantTool) -> None:
         self.tool = tool
         self.api_client = tool.api_client
         args: Namespace = tool.args
+
         self.application_messages = self._get_application_messages(
             args.message_list_path
         )
-        self.area = args.area
-        self.bottom_lat = args.bottom_lat
-        self.currency = args.currency
-        self.date_from = args.date_from
-        self.date_to = args.date_to
-        self.dry_run = args.dry_run
-        self.employer_id = args.employer_id
-        self.employment = args.employment
-        self.excluded_employer_id = args.excluded_employer_id
-        self.experience = args.experience
-        self.force_message = args.force_message
-        self.industry = args.industry
-        self.label = args.label
-        self.left_lng = args.left_lng
-        self.metro = args.metro
-        self.no_magic = args.no_magic
-        self.only_with_salary = args.only_with_salary
-        self.order_by = args.order_by
-        self.per_page = args.per_page
-        self.period = args.period
-        self.pre_prompt = args.prompt
-        self.premium = args.premium
-        self.professional_role = args.professional_role
+
         self.resume_id = args.resume_id
-        self.right_lng = args.right_lng
-        self.salary = args.salary
-        self.schedule = args.schedule
         self.search = args.search
-        self.search_field = args.search_field
-        self.excluded_terms = self._parse_excluded_terms(args.excluded_terms)
-        self.sort_point_lat = args.sort_point_lat
-        self.sort_point_lng = args.sort_point_lng
-        self.top_lat = args.top_lat
         self.total_pages = args.total_pages
+        self.per_page = args.per_page
+        self.dry_run = args.dry_run
+        self.force_message = args.force_message
         self.openai_chat = (
             tool.get_openai_chat(args.first_prompt) if args.use_ai else None
         )
+        self.pre_prompt = args.prompt
+        self.excluded_terms = self._parse_excluded_terms(args.excluded_terms)
+
         self._apply_similar()
 
     def _apply_similar(self) -> None:
-        resumes: list[datatypes.Resume] = self.tool.get_resumes()
-        try:
-            self.tool.storage.resumes.save_batch(resumes)
-        except RepositoryError as ex:
-            logger.exception(ex)
-        resumes = (
-            list(filter(lambda x: x["id"] == self.resume_id, resumes))
-            if self.resume_id
-            else resumes
-        )
-        # Выбираем только опубликованные
-        resumes = list(
-            filter(lambda x: x["status"]["id"] == "published", resumes)
-        )
+        resumes = self.tool.get_resumes()
+        resumes = [
+            r for r in resumes
+            if r["status"]["id"] == "published"
+               and (not self.resume_id or r["id"] == self.resume_id)
+        ]
+
         if not resumes:
             logger.warning("У вас нет опубликованных резюме")
             return
 
-        me: datatypes.User = self.tool.get_me()
-        seen_employers = set()
+        user = self.tool.get_me()
+        seen_employers: set[str] = set()
 
         for resume in resumes:
-            self._apply_resume(
-                resume=resume,
-                user=me,
-                seen_employers=seen_employers,
-            )
+            self._apply_resume(resume, user, seen_employers)
 
-        # Синхронизация откликов
-        # for neg in self.tool.get_negotiations():
-        #     try:
-        #         self.tool.storage.negotiations.save(neg)
-        #     except RepositoryError as e:
-        #         logger.warning(e)
-
-        print("📝 Отклики на вакансии разосланы!")
+        logger.info("📝 Отклики на вакансии разосланы!")
 
     def _apply_resume(
-        self,
-        resume: datatypes.Resume,
-        user: datatypes.User,
-        seen_employers: set[str],
+            self,
+            resume: datatypes.Resume,
+            user: datatypes.User,
+            seen_employers: set[str],
     ) -> None:
-        logger.info("Начинаю рассылку откликов для резюме: %s (%s)", resume["alternate_url"], resume["title"])
-        print("🚀 Начинаю рассылку откликов для резюме:", resume["title"])
+        logger.info(
+            "🚀 Начинаю рассылку откликов для резюме: %s (%s)",
+            resume["alternate_url"],
+            resume["title"],
+        )
 
         placeholders = {
             "first_name": user.get("first_name") or "",
@@ -352,276 +136,106 @@ class Operation(BaseOperation):
 
         do_apply = True
 
-        for vacancy in self._get_similar_vacancies(resume_id=resume["id"]):
+        for vacancy in self._get_similar_vacancies(resume["id"]):
             try:
-                employer = vacancy.get("employer", {})
-
-                message_placeholders = {
-                    "vacancy_name": vacancy.get("name", ""),
-                    "employer_name": employer.get("name", ""),
-                    **placeholders,
-                }
-
-                storage = self.tool.storage
-
-                try:
-                    storage.vacancies.save(vacancy)
-                except RepositoryError as ex:
-                    logger.debug(ex)
-
-                # По факту контакты можно получить только здесь?!
-                if vacancy.get("contacts"):
-                    logger.debug(
-                        f"Найдены контакты в вакансии: {vacancy['alternate_url']}"
-                    )
-
-                    try:
-                        # logger.debug(vacancy)
-                        storage.vacancy_contacts.save(vacancy)
-                    except RepositoryError as ex:
-                        logger.exception(ex)
-
-                    employer_id = employer.get("id")
-                    if employer_id and employer_id not in seen_employers:
-                        employer_profile: datatypes.Employer = (
-                            self.api_client.get(f"/employers/{employer_id}")
-                        )
-
-                        try:
-                            storage.employers.save(employer_profile)
-                        except RepositoryError as ex:
-                            logger.exception(ex)
-
                 if not do_apply:
                     continue
 
-                if vacancy.get("has_test"):
-                    logger.debug(
-                        "Пропускаем вакансию с тестом: %s",
-                        vacancy["alternate_url"],
-                    )
+                if vacancy.get("archived") or vacancy.get("has_test"):
                     continue
-
-                if vacancy.get("archived"):
-                    logger.debug(
-                        "Пропускаем вакансию в архиве: %s",
-                        vacancy["alternate_url"],
-                    )
-                    continue
-
-                if redirect_url := vacancy.get("response_url"):
-                    logger.debug(
-                        "Пропускаем вакансию %s с перенаправлением: %s",
-                        vacancy["alternate_url"],
-                        redirect_url,
-                    )
-                    continue
-
-                vacancy_id = vacancy["id"]
 
                 relations = vacancy.get("relations", [])
-
                 if relations:
-                    logger.debug(
-                        "Пропускаем вакансию с откликом: %s",
-                        vacancy["alternate_url"],
-                    )
                     if "got_rejection" in relations:
-                        logger.debug(
-                            "Вы получили отказ от %s",
+                        logger.warning(
+                            "⛔ Пришел отказ от %s",
                             vacancy["alternate_url"],
                         )
-                        print("⛔ Пришел отказ от", vacancy["alternate_url"])
                     continue
 
                 if self._is_excluded(vacancy):
-                    logger.warning("Вакансия содержит недопустимые словосочетания: %s",vacancy["alternate_url"])
+                    logger.warning(
+                        "Вакансия содержит недопустимые слова: %s",
+                        vacancy["alternate_url"],
+                    )
                     continue
 
                 params = {
                     "resume_id": resume["id"],
-                    "vacancy_id": vacancy_id,
+                    "vacancy_id": vacancy["id"],
                     "message": "",
                 }
 
-                if self.force_message or vacancy.get(
-                    "response_letter_required"
-                ):
+                if self.force_message or vacancy.get("response_letter_required"):
                     if self.openai_chat:
-                        msg = self.pre_prompt + "\n\n"
-                        msg += (
-                            "Название вакансии: "
-                            + message_placeholders["vacancy_name"]
+                        msg = self.openai_chat.send_message(
+                            f"{self.pre_prompt}\n{vacancy.get('name')}"
                         )
-                        msg += (
-                            "Мое резюме:" + message_placeholders["resume_title"]
-                        )
-                        logger.debug("prompt: %s", msg)
-                        msg = self.openai_chat.send_message(msg)
                     else:
                         msg = unescape_string(
                             rand_text(random.choice(self.application_messages))
-                            % message_placeholders
+                            % placeholders
                         )
-
-                    logger.debug(msg)
                     params["message"] = msg
 
-                try:
-                    if not self.dry_run:
-                        res = self.api_client.post(
-                            "/negotiations",
-                            params,
-                            delay=random.uniform(1, 3),
-                        )
-                        assert res == {}
-                        logger.debug("Откликнулись на %s", vacancy["alternate_url"])
-                    print(
-                        "📨 Отправили отклик для резюме",
-                        resume["alternate_url"],
-                        "на вакансию",
-                        vacancy["alternate_url"],
-                        "(",
-                        shorten(vacancy["name"]),
-                        ")",
+                if not self.dry_run:
+                    self.api_client.post(
+                        "/negotiations",
+                        params,
+                        delay=random.uniform(1, 3),
                     )
-                except Redirect:
-                    logger.warning(
-                        f"Игнорирую перенаправление на форму: {vacancy['alternate_url']}"  # noqa: E501
-                    )
+
+                logger.info(
+                    "📨 Отправили отклик для резюме %s на вакансию %s (%s)",
+                    resume["alternate_url"],
+                    vacancy["alternate_url"],
+                    shorten(vacancy["name"]),
+                )
+
             except LimitExceeded:
-                logger.info("Достигли лимита на отклики для резюме: %s", resume["alternate_url"])
-                print("⚠️ Достигли лимита рассылки для резюме", resume["alternate_url"])
+                logger.warning(
+                    "⚠️ Достигли лимита рассылки для резюме %s",
+                    resume["alternate_url"],
+                )
                 do_apply = False
-            except ApiError as ex:
-                logger.warning(ex)
-            except (BadResponse, AIError) as ex:
+            except (ApiError, BadResponse, AIError) as ex:
                 logger.error(ex)
 
-        logger.info("Закончили рассылку откликов для резюме: %s (%s)", resume["alternate_url"], resume["title"])
-        print("✅️ Закончили рассылку откликов для резюме:", resume["title"])
-
-    def _get_search_params(self, page: int) -> dict:
-        params = {
-            "page": page,
-            "per_page": self.per_page,
-        }
-        if self.order_by:
-            params |= {"order_by": self.order_by}
-        if self.search:
-            params["text"] = self.search
-        if self.schedule:
-            params["schedule"] = self.schedule
-        if self.experience:
-            params["experience"] = self.experience
-        if self.currency:
-            params["currency"] = self.currency
-        if self.salary:
-            params["salary"] = self.salary
-        if self.period:
-            params["period"] = self.period
-        if self.date_from:
-            params["date_from"] = self.date_from
-        if self.date_to:
-            params["date_to"] = self.date_to
-        if self.top_lat:
-            params["top_lat"] = self.top_lat
-        if self.bottom_lat:
-            params["bottom_lat"] = self.bottom_lat
-        if self.left_lng:
-            params["left_lng"] = self.left_lng
-        if self.right_lng:
-            params["right_lng"] = self.right_lng
-        if self.sort_point_lat:
-            params["sort_point_lat"] = self.sort_point_lat
-        if self.sort_point_lng:
-            params["sort_point_lng"] = self.sort_point_lng
-        if self.search_field:
-            params["search_field"] = list(self.search_field)
-        if self.employment:
-            params["employment"] = list(self.employment)
-        if self.area:
-            params["area"] = list(self.area)
-        if self.metro:
-            params["metro"] = list(self.metro)
-        if self.professional_role:
-            params["professional_role"] = list(self.professional_role)
-        if self.industry:
-            params["industry"] = list(self.industry)
-        if self.employer_id:
-            params["employer_id"] = list(self.employer_id)
-        if self.excluded_employer_id:
-            params["excluded_employer_id"] = list(self.excluded_employer_id)
-        if self.label:
-            params["label"] = list(self.label)
-        if self.only_with_salary:
-            params["only_with_salary"] = bool2str(self.only_with_salary)
-        # if self.clusters:
-        #     params["clusters"] = bool2str(self.clusters)
-        if self.no_magic:
-            params["no_magic"] = bool2str(self.no_magic)
-        if self.premium:
-            params["premium"] = bool2str(self.premium)
-        # if self.responses_count_enabled is not None:
-        #     params["responses_count_enabled"] = bool2str(self.responses_count_enabled)
-
-        return params
+        logger.info(
+            "✅️ Закончили рассылку откликов для резюме: %s (%s)",
+            resume["alternate_url"],
+            resume["title"],
+        )
 
     def _get_similar_vacancies(self, resume_id: str) -> Iterator[SearchVacancy]:
         for page in range(self.total_pages):
-            logger.debug(
-                f"Загружаем подходящие вакансии со страницы: {page + 1}"
-            )
-            params = self._get_search_params(page)
             res: PaginatedItems[SearchVacancy] = self.api_client.get(
                 f"/resumes/{resume_id}/similar_vacancies",
-                params,
+                {"page": page, "per_page": self.per_page},
             )
-
-            logger.debug(f"Количество подходящих вакансий: {res['found']}")
-
-            if not res["items"]:
-                return
-
-            yield from res["items"]
-
-            if page >= res["pages"] - 1:
-                return
+            yield from res.get("items", [])
 
     @staticmethod
     def _parse_excluded_terms(excluded_terms: str | None) -> list[str]:
         if not excluded_terms:
             return []
-        return [
-            x.strip() for x in excluded_terms.lower().split(",") if x.strip()
-        ]
+        return [x.strip().lower() for x in excluded_terms.split(",") if x.strip()]
 
     def _is_excluded(self, vacancy: SearchVacancy) -> bool:
         snippet = vacancy.get("snippet") or {}
-        combined = " ".join(
+        text = " ".join(
             [
                 vacancy.get("name") or "",
                 snippet.get("requirement") or "",
                 snippet.get("responsibility") or "",
-            ]
+                ]
         ).lower()
-
-        return any(v in combined for v in self.excluded_terms)
+        return any(term in text for term in self.excluded_terms)
 
     def _get_application_messages(self, path: Path | None) -> list[str]:
-        return (
-            list(
-                filter(
-                    None,
-                    map(
-                        str.strip,
-                        path.open(encoding="utf-8", errors="replace"),
-                    ),
-                )
-            )
-            if path
-            else [
-                "Здравствуйте, меня зовут %(first_name)s. {Меня заинтересовала|Мне понравилась} ваша вакансия «%(vacancy_name)s». Хотелось бы {пообщаться|задать вопросы} о ней.",
-                "{Прошу|Предлагаю} рассмотреть {мою кандидатуру|мое резюме «%(resume_title)s»} на вакансию «%(vacancy_name)s». С уважением, %(first_name)s.",  # noqa: E501
+        if not path:
+            return [
+                "Здравствуйте, меня зовут %(first_name)s. Меня заинтересовала вакансия «%(vacancy_name)s».",
+                "Прошу рассмотреть мою кандидатуру на вакансию «%(vacancy_name)s».",
             ]
-        )
+        return [line.strip() for line in path.open(encoding="utf-8") if line.strip()]
